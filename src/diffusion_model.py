@@ -46,12 +46,12 @@ class LinearBlock(torch.nn.Module):
 
 
 class RCTDiffusionModel(torch.nn.Module):
-    denoise_levels = 8
+    denoise_levels = 64
     def __init__(self):
         super().__init__()
 
         conv_depth = 3
-        features_base = 32
+        features_base = 64
         # 256x256
         self.conv256 = ConvolutionBlock(conv_depth, 3, features_base).to('cuda:0')
 

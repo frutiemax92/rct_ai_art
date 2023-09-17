@@ -5,6 +5,36 @@ import numpy as np
 import torch
 import torchvision.transforms as T
 
+class DiffusionData:
+    def __init__(self, img : Image):
+        self.target = img
+        self.images = []
+        self.noise_images = []
+    
+    def generate_images_with_noise(self, num_noise_levels):
+        image = self.target
+
+        noise_image = DiffusionData.generate_noise_image(image.size)
+        for noise in range(num_noise_levels):
+            scale = self.get_scale(noise, num_noise_levels)
+            new_image = ImageChops.blend(image, noise_image, scale)
+            delta = ImageChops.subtract(new_image, image)
+            self.images.append(new_image)
+            self.noise_images.append(delta)
+            image = new_image
+    
+    def get_scale(self, noise_level, num_noise_levels):
+        if noise_level == 0:
+            return 0.0
+        return 2**noise_level/ 2**(num_noise_levels - 1)
+    
+    def generate_noise_image(size):
+        image = Image.new('RGB', size)
+        data = np.array(image)
+        data = np.random.normal(128.0, 16.0, size=data.shape)
+        return Image.fromarray(np.uint8(data))
+
+    
 class DiffusionDatasetBuilder:
     def __init__(self):
         self.target_images = []
@@ -24,7 +54,11 @@ class DiffusionDatasetBuilder:
 
                 # only use the top left quadrant
                 image = image.crop((0, 0, 256, 256))
-                self.target_images.append(image)
+                self.target_images.append(DiffusionData(image))
+    
+    def generate_noisy_images(self, num_noise_levels):
+        for target in self.target_images:
+            target.generate_images_with_noise(num_noise_levels)
         
     def sample_noisy_images(self, num_noise_levels : int = 8, algorithm='one_by_target') -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # create noise images for every target image
@@ -48,38 +82,39 @@ class DiffusionDatasetBuilder:
                 times[ref_index] = noise_level
             return queries.to('cuda:0'), times.to('cuda:0'), targets.to('cuda:0')
         elif algorithm == 'one_by_noise_level':
-            targets = torch.Tensor(size=(num_noise_levels, 3, 256, 256))
-            queries = torch.Tensor(size=(num_noise_levels, 3, 256, 256))
-            times = torch.Tensor(size=(num_noise_levels, 1))
+            targets = torch.Tensor(size=(num_noise_levels - 1, 3, 256, 256))
+            queries = torch.Tensor(size=(num_noise_levels - 1, 3, 256, 256))
+            times = torch.Tensor(size=(num_noise_levels - 1, 1))
 
-            noise_levels = [i for i in range(num_noise_levels)]
+            noise_levels = [i for i in range(1, num_noise_levels)]
 
             idx = 0
             for noise_level in noise_levels:
                 ref_index = np.random.randint(0, len(self.target_images))
                 ref = self.target_images[ref_index]
-                noise_factor = self.get_noise_level(noise_level, num_noise_levels)
-                noise_image = self.generate_noise_image(noise_factor)
-                target = noise_image
-                query = ImageChops.add(noise_image, ref)
+
+                query = ref.images[noise_level]
+                target = ref.noise_images[noise_level]
                 
                 targets[idx] = transform(target)
                 queries[idx] = transform(query)
                 times[idx] = noise_level
                 idx = idx + 1
             return queries.to('cuda:0'), times.to('cuda:0'), targets.to('cuda:0')
-    
-    def get_noise_level(self, noise_level, num_noise_levels) -> float:
-      return 1.5 ** (noise_level) / (1.5 ** (num_noise_levels - 1))
-    def generate_noise_image(self, noise_factor=1.0) -> Image.Image:
-        if noise_factor == 0:
-            return Image.fromarray(np.zeros((256, 256, 3), dtype=np.uint8))
-        noise = np.random.randint(0, 256 * noise_factor, size=(256, 256, 3), dtype=np.uint8)
-        noise_image = Image.fromarray(np.uint8(noise))
-        return noise_image
 
 if __name__ == '__main__':
     diffusion_builder = DiffusionDatasetBuilder()
     diffusion_builder.load_single_images()
-    queries, targets = diffusion_builder.sample_noisy_images()
+    #queries, targets = diffusion_builder.sample_noisy_images()
+
+    data = DiffusionData(diffusion_builder.target_images[0])
+    images, noise_images = data.get_images_with_noise(8)
+
+    for i in range(8):
+        image = images[i]
+        noise_image = noise_images[i]
+
+        image.show()
+        noise_image.show()
+
 

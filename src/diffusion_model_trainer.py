@@ -56,6 +56,7 @@ if __name__ == '__main__':
 
     dataset = DiffusionDatasetBuilder()
     dataset.load_single_images()
+    dataset.generate_noisy_images(RCTDiffusionModel.denoise_levels)
 
     diffusion_model_trainer = DiffusionModelTrainer(diffusion_model, dataset)
     diffusion_model_trainer.train(500, learn_rate=1e-3, batch_size=64)
