@@ -1,4 +1,5 @@
 from PIL import Image
+from PIL import ImageChops
 import os
 import numpy as np
 import torch
@@ -37,11 +38,10 @@ class DiffusionDatasetBuilder:
             for ref_index in range(len(self.target_images)):
                 ref = self.target_images[ref_index]
                 noise_level = np.random.randint(0, num_noise_levels)
-                noise_image = self.generate_noise_image()
+                noise_image = self.generate_noise_image(noise_level)
 
-                target = Image.blend(ref, noise_image, (noise_level) / num_noise_levels)
-                query = Image.blend(ref, noise_image, (noise_level + 1) / num_noise_levels)
-
+                target = noise_image
+                query = ImageChops.add(noise_image, ref)
                 
                 targets[ref_index] = transform(target)
                 queries[ref_index] = transform(query)
@@ -58,23 +58,21 @@ class DiffusionDatasetBuilder:
             for noise_level in noise_levels:
                 ref_index = np.random.randint(0, len(self.target_images))
                 ref = self.target_images[ref_index]
-                noise_image = self.generate_noise_image()
-
-                target = Image.blend(ref, noise_image, self.get_noise_blend_factor(noise_level, num_noise_levels))
-                query = Image.blend(ref, noise_image, self.get_noise_blend_factor(noise_level + 1, num_noise_levels))
-
+                noise_image = self.generate_noise_image(noise_level / (num_noise_levels - 1))
+                target = noise_image
+                query = ImageChops.add(noise_image, ref)
+                
                 targets[idx] = transform(target)
                 queries[idx] = transform(query)
                 times[idx] = noise_level
                 idx = idx + 1
             return queries.to('cuda:0'), times.to('cuda:0'), targets.to('cuda:0')
     
-    def get_noise_blend_factor(self, noise_level, num_noise_levels) -> float:
-        res = noise_level * noise_level / (num_noise_levels - 1) / (num_noise_levels - 1)
-        return res
-    def generate_noise_image(self) -> Image.Image:
-        noise = np.random.randint(0, 256, size=(256, 256, 3), dtype=np.uint8)
-        noise_image = Image.fromarray(noise)
+    def generate_noise_image(self, noise_factor=1.0) -> Image.Image:
+        if noise_factor == 0:
+            return Image.fromarray(np.zeros((256, 256, 3), dtype=np.uint8))
+        noise = np.random.randint(0, 256 * noise_factor, size=(256, 256, 3), dtype=np.uint8)
+        noise_image = Image.fromarray(np.uint8(noise))
         return noise_image
 
 if __name__ == '__main__':
