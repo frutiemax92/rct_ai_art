@@ -50,7 +50,8 @@ class RCTDiffusionModel(torch.nn.Module):
         # downsampling 2
         self.downsample2 = torch.nn.MaxPool2d(kernel_size=3, stride=8)
         self.latent_conv1 = ConvolutionBlock(conv_depth, 128, 256).to('cuda:0')
-        self.time_linear_blocks = LinearBlock(3, 1, 16384)
+        self.time_linear_blocks = LinearBlock(3, 1, 64*3)
+        self.time_conv_block = ConvolutionBlock(conv_depth, 3, 256)
         self.latent_conv2 = ConvolutionBlock(conv_depth, 512, 128).to('cuda:0')
 
         #upsampling 1
@@ -70,7 +71,8 @@ class RCTDiffusionModel(torch.nn.Module):
         y2 = self.downsample2(y1)
         y2 = relu(self.latent_conv1(y2))
         times = relu(self.time_linear_blocks(times))
-        times = torch.reshape(times, y2.shape)
+        times = torch.reshape(times, (times.size(0), 3, 8, 8))
+        times = self.time_conv_block(times)
         y2 = torch.cat([y2, times], 1)
         y2 = relu(self.latent_conv2(y2))
         y3 = self.upsample1(y2)
