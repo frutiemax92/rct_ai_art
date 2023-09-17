@@ -18,7 +18,7 @@ class DiffusionModelTrainer:
         pred_image.show()
 
     def train(self, num_epochs = 1000, learn_rate=1e-3, batch_size=32):
-        loss_fn = torch.nn.MSELoss()
+        loss_fn = torch.nn.MSELoss(reduction='sum')
         optimizer = torch.optim.Adam(self.diffusion_model.parameters(), lr=learn_rate)
         scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99)
         self.diffusion_model.train()
@@ -58,5 +58,5 @@ if __name__ == '__main__':
     dataset.load_single_images()
 
     diffusion_model_trainer = DiffusionModelTrainer(diffusion_model, dataset)
-    diffusion_model_trainer.train(1000, learn_rate=1e-3, batch_size=64)
+    diffusion_model_trainer.train(500, learn_rate=1e-3, batch_size=64)
     diffusion_model_trainer.save_model('model_weigths.pth')

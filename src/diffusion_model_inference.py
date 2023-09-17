@@ -30,8 +30,9 @@ class DiffusionModelInference:
         with torch.no_grad():
             self.diffusion_model.eval()
             stop_iter = RCTDiffusionModel.denoise_levels
-            for i in range(stop_iter):
+            for i in range(2):
                 time[0] = (RCTDiffusionModel.denoise_levels - 1 - i)
+                #time[0] = i
                 predicted_noise = self.diffusion_model(x, time)
                 predicted_noise = to_pil(predicted_noise[0])
                 noise_image = ImageChops.subtract(noise_image, predicted_noise)

@@ -58,7 +58,8 @@ class DiffusionDatasetBuilder:
             for noise_level in noise_levels:
                 ref_index = np.random.randint(0, len(self.target_images))
                 ref = self.target_images[ref_index]
-                noise_image = self.generate_noise_image(noise_level / (num_noise_levels - 1))
+                noise_factor = self.get_noise_level(noise_level, num_noise_levels)
+                noise_image = self.generate_noise_image(noise_factor)
                 target = noise_image
                 query = ImageChops.add(noise_image, ref)
                 
@@ -68,6 +69,8 @@ class DiffusionDatasetBuilder:
                 idx = idx + 1
             return queries.to('cuda:0'), times.to('cuda:0'), targets.to('cuda:0')
     
+    def get_noise_level(self, noise_level, num_noise_levels) -> float:
+      return 1.5 ** (noise_level) / (1.5 ** (num_noise_levels - 1))
     def generate_noise_image(self, noise_factor=1.0) -> Image.Image:
         if noise_factor == 0:
             return Image.fromarray(np.zeros((256, 256, 3), dtype=np.uint8))

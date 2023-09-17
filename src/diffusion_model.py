@@ -11,6 +11,17 @@ class ConvolutionBlock(torch.nn.Module):
         for conv_layer in self.conv_layers:
             x = conv_layer(x)
         return x
+  
+class LatentConvolutionBlock(torch.nn.Module):
+    def __init__(self, depth, in_channels=3, mid_features=3, out_channels=3):
+        super().__init__()
+        self.conv_layers = torch.nn.ModuleList([torch.nn.Conv2d(in_channels, mid_features, kernel_size=3, padding=1).to('cuda:0') for _ in range(depth)]) 
+        self.conv_layers[-1] = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1).to('cuda:0')
+    def forward(self, x, times):
+        for conv_layer in self.conv_layers:
+            y = torch.cat([x, times], 1)
+            x = conv_layer(y)
+        return x
 
 class BilinearBlock(torch.nn.Module):
     def __init__(self, depth, num_features):
@@ -35,32 +46,35 @@ class LinearBlock(torch.nn.Module):
 
 
 class RCTDiffusionModel(torch.nn.Module):
-    denoise_levels = 64
+    denoise_levels = 8
     def __init__(self):
         super().__init__()
 
-        conv_depth = 2
+        conv_depth = 3
+        features_base = 32
         # 256x256
-        self.conv256 = ConvolutionBlock(conv_depth, 3, 64).to('cuda:0')
+        self.conv256 = ConvolutionBlock(conv_depth, 3, features_base).to('cuda:0')
 
         # downsampling 1
         self.downsample1 = torch.nn.MaxPool2d(kernel_size=3, stride=4)
-        self.conv64 = ConvolutionBlock(conv_depth, 64, 128).to('cuda:0')
+        self.conv64 = ConvolutionBlock(conv_depth, features_base, features_base*2).to('cuda:0')
 
         # downsampling 2
         self.downsample2 = torch.nn.MaxPool2d(kernel_size=3, stride=8)
-        self.latent_conv1 = ConvolutionBlock(conv_depth, 128, 256).to('cuda:0')
-        self.time_linear_blocks = LinearBlock(3, 1, 64*3)
-        self.time_conv_block = ConvolutionBlock(conv_depth, 3, 256)
-        self.latent_conv2 = ConvolutionBlock(conv_depth, 512, 128).to('cuda:0')
+        self.latent_conv1 = ConvolutionBlock(conv_depth, features_base*2, features_base*4).to('cuda:0')
+        self.time_linear_blocks_mult = LinearBlock(256, 1, 64*3)
+        self.time_linear_blocks_add = LinearBlock(256, 1, 64*3)
+        self.time_conv_block_add = ConvolutionBlock(conv_depth, 3, features_base*4)
+        self.time_conv_block_mult = ConvolutionBlock(conv_depth, 3, features_base*4)
+        self.latent_conv2 = LatentConvolutionBlock(conv_depth, features_base*8, features_base*4, features_base*2).to('cuda:0')
 
         #upsampling 1
         self.upsample1 = torch.nn.Upsample(scale_factor=8)
-        self.conv64_out = ConvolutionBlock(conv_depth, 256, 64).to('cuda:0')
+        self.conv64_out = ConvolutionBlock(conv_depth, features_base*4, features_base).to('cuda:0')
 
         # upsamping 2
         self.upsample2 = torch.nn.Upsample(scale_factor=4)
-        self.conv256_out = ConvolutionBlock(conv_depth, 128, 3).to('cuda:0')
+        self.conv256_out = ConvolutionBlock(conv_depth, features_base*2, 3).to('cuda:0')
     
     def forward(self, x, times):
         y0 = relu(self.conv256(x))
@@ -70,11 +84,17 @@ class RCTDiffusionModel(torch.nn.Module):
 
         y2 = self.downsample2(y1)
         y2 = relu(self.latent_conv1(y2))
-        times = relu(self.time_linear_blocks(times))
-        times = torch.reshape(times, (times.size(0), 3, 8, 8))
-        times = self.time_conv_block(times)
-        y2 = torch.cat([y2, times], 1)
-        y2 = relu(self.latent_conv2(y2))
+
+        times_add = relu(self.time_linear_blocks_add(times))
+        times_add = torch.reshape(times_add, (times.size(0), 3, 8, 8))
+        times_add = relu(self.time_conv_block_add(times_add))
+
+        times_mult = relu(self.time_linear_blocks_mult(times))
+        times_mult = torch.reshape(times_mult, (times.size(0), 3, 8, 8))
+        times_mult = relu(self.time_conv_block_mult(times_mult))
+
+        y2_p = relu(y2 * times_mult + times_add)
+        y2 = relu(self.latent_conv2(y2, y2_p))
         y3 = self.upsample1(y2)
 
         y3 = torch.cat((y1, y3), dim=1)
