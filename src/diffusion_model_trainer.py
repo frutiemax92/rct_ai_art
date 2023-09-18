@@ -30,8 +30,9 @@ class DiffusionModelTrainer:
                 end = np.minimum(batch_count + batch_size, queries.size(0))
                 pred = self.diffusion_model(queries[batch_count:end], times[batch_count:end])
 
-                #self.show_prediction(pred[61])
-                #self.show_prediction(targets[61])
+                #self.show_prediction(queries[8])
+                #self.show_prediction(pred[8])
+                #self.show_prediction(targets[8])
 
                 loss = loss_fn(pred, targets[batch_count:end])
                 loss.backward()

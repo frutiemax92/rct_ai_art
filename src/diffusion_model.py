@@ -46,7 +46,7 @@ class LinearBlock(torch.nn.Module):
 
 
 class RCTDiffusionModel(torch.nn.Module):
-    denoise_levels = 64
+    denoise_levels = 32
     def __init__(self):
         super().__init__()
 
@@ -62,8 +62,8 @@ class RCTDiffusionModel(torch.nn.Module):
         # downsampling 2
         self.downsample2 = torch.nn.MaxPool2d(kernel_size=3, stride=8)
         self.latent_conv1 = ConvolutionBlock(conv_depth, features_base*2, features_base*4).to('cuda:0')
-        self.time_linear_blocks_mult = LinearBlock(256, 1, 64*3)
-        self.time_linear_blocks_add = LinearBlock(256, 1, 64*3)
+        self.time_linear_blocks_mult = LinearBlock(64, 1, 64*3)
+        self.time_linear_blocks_add = LinearBlock(64, 1, 64*3)
         self.time_conv_block_add = ConvolutionBlock(conv_depth, 3, features_base*4)
         self.time_conv_block_mult = ConvolutionBlock(conv_depth, 3, features_base*4)
         self.latent_conv2 = LatentConvolutionBlock(conv_depth, features_base*8, features_base*4, features_base*2).to('cuda:0')

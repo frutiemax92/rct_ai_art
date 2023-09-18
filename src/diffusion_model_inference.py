@@ -29,12 +29,14 @@ class DiffusionModelInference:
         with torch.no_grad():
             self.diffusion_model.eval()
             stop_iter = RCTDiffusionModel.denoise_levels
-            for i in range(RCTDiffusionModel.denoise_levels - 1):
-                time[0] = (RCTDiffusionModel.denoise_levels - 1 - i)
+            times = [i for i in range(RCTDiffusionModel.denoise_levels)]
+            times.reverse()
+            for t in times:
+                time[0] = t
                 #time[0] = i
                 predicted_noise = self.diffusion_model(x, time)
                 predicted_noise = to_pil(predicted_noise[0])
-                noise_image = ImageChops.subtract(noise_image, predicted_noise)
+                noise_image = DiffusionData.backward_noise(to_pil(x[0]), predicted_noise, t/(RCTDiffusionModel.denoise_levels-1))
                 x[0] = transform(noise_image).to('cuda:0')
         return transform2(x[0].to('cpu'))
 
